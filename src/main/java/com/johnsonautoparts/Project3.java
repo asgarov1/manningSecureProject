@@ -21,6 +21,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -317,7 +325,7 @@ public class Project3 extends Project {
 		}
 	}
 
-	/*
+	/*TODO: Milestone 2!
 	 * Project 3, Milestone 1, Task 4
 	 * 
 	 * TITLE: Handling NullPointerException
@@ -332,7 +340,7 @@ public class Project3 extends Project {
 	 * @param str
 	 * @return boolean
 	 */
-	public boolean testNull(@Nonnull String str) {
+	public boolean testNull(String str) {
 		try {
 			if(str == null) {
 				throw new IllegalArgumentException("Argument is not allowed to be null");
@@ -343,11 +351,6 @@ public class Project3 extends Project {
 			AppLogger.log("testNull caught NullPointer");
 			throw new NullPointerException("testNull received null object");
 		}
-	}
-	
-	private void psvm() {
-		// TODO Auto-generated method stub
-
 	}
 
 	/*
@@ -370,14 +373,16 @@ public class Project3 extends Project {
 			throw new AppException("deleteFile passed a null variable");
 		}
 
-		fileName.replaceAll("\\.", "_");
+		fileName = fileName.replaceAll("\\.", "_");
 		File f = new File(fileName);
 
 		// delete the file
 		try {
-			f.delete();
-
-			return ("Deleted file: " + f.getCanonicalPath());
+			if(f.delete()) {
+				return ("Deleted file: " + f.getCanonicalPath());
+			} else {
+				throw new AppException("deleteFile unsuccessful");
+			}
 		} catch (IOException ioe) {
 			throw new AppException(
 					"deleteFile caught IO exception: " + ioe.getMessage());
@@ -401,14 +406,11 @@ public class Project3 extends Project {
 	 */
 	public String manipulateString(String str) throws AppException {
 		// check if the value is null or empty before manipulating string
-		if (str == null | str.isEmpty()) {
+		if (str == null || str.isEmpty()) {
 			throw new AppException("manipulate string sent null or empty");
 		}
 
-		String manipulated = str.toUpperCase(Locale.ENGLISH);
-		manipulated = manipulated.replaceAll("\\.", "_");
-
-		return manipulated;
+		return str.toUpperCase(Locale.ENGLISH).replaceAll("\\.", "_");
 	}
 
 	/*
@@ -434,13 +436,9 @@ public class Project3 extends Project {
 
 		// read the first 1024 bytes of the file
 		try (FileInputStream fis = new FileInputStream(fileName)) {
-			fis.read(data, 0, BUFFER);
-
-			// return the data from file read as a string
-			// for this exercise, you can ignore checking if the data read is a
-			// valid
-			// string or characters. we are only interested in file-related
-			// errors
+			if(fis.read(data, 0, BUFFER) != 0) {
+				throw new AppException("nothing was read!");
+			}
 			return Arrays.toString(data);
 		} catch (FileNotFoundException fnfe) {
 			throw new AppException("detectFileError could not find file: "
@@ -473,15 +471,26 @@ public class Project3 extends Project {
 	 * 
 	 * @param str
 	 */
-	public void recoverState(String str) {
+	BlockingQueue<Object> blockingQueue = new LinkedBlockingQueue<>();
+	
+	public void recoverState(String str) throws InterruptedException {
 		// create the thread to look for the data_id attribute in the session so
 		// we can
 		// do further processing
-		Runnable checkSessionRunnable = new CheckSession(
-				httpRequest.getSession());
-
-		Thread t = new Thread(checkSessionRunnable);
-		t.start();
+		ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
+		executorService.schedule(this::checkForDataId, 100, TimeUnit.MILLISECONDS);
+		Object data = blockingQueue.take();
+		//TODO not sure about this code
+//		Runnable checkSessionRunnable = new CheckSession(httpRequest.getSession());
+//
+//		Thread t = new Thread(checkSessionRunnable);
+//		t.start();
+	}
+	
+	private void checkForDataId() {
+		if((httpRequest.getSession().getAttribute("data_id") instanceof String)) {
+			blockingQueue.add(httpRequest.getSession().getAttribute("data_id"));
+		}
 	}
 
 	/*
@@ -542,11 +551,6 @@ public class Project3 extends Project {
 	 */
 	public boolean handleClose(String zipFile)
 			throws AppException, IOException {
-		FileInputStream fis = null;
-		ZipInputStream zis = null;
-		FileOutputStream fos = null;
-		BufferedOutputStream dest = null;
-
 		final int BUFFER = 512;
 		int count = 0;
 
@@ -562,10 +566,8 @@ public class Project3 extends Project {
 
 		byte[] data = null;
 
-		try {
-			// open the zip file
-			fis = new FileInputStream(zipFile.toString());
-			zis = new ZipInputStream(new BufferedInputStream(fis));
+		try(FileInputStream fis = new FileInputStream(zipFile.toString()); 
+				ZipInputStream zis = new ZipInputStream(new BufferedInputStream(fis))) {
 			ZipEntry entry;
 
 			/*
@@ -576,9 +578,8 @@ public class Project3 extends Project {
 			 * bombs you do not need to fix that issue here
 			 */
 			while ((entry = zis.getNextEntry()) != null) {
-				try {
-					fos = new FileOutputStream(zipPath + entry.getName());
-					dest = new BufferedOutputStream(fos);
+				try (FileOutputStream fos = new FileOutputStream(zipPath + entry.getName());
+						BufferedOutputStream dest = new BufferedOutputStream(fos);) {
 
 					while ((count = zis.read(data, 0, BUFFER)) != -1) {
 						dest.write(data, 0, count);
@@ -588,15 +589,6 @@ public class Project3 extends Project {
 					dest.flush();
 					zis.closeEntry();
 				}
-				// clean up and close the resources
-				finally {
-					if (fos != null) {
-						fos.close();
-					}
-					if (dest != null) {
-						dest.close();
-					}
-				}
 			}
 
 			// zip extracted correctly with no errors
@@ -604,15 +596,6 @@ public class Project3 extends Project {
 
 		} catch (FileNotFoundException fnfe) {
 			throw new AppException("zip file not found: " + fnfe.getMessage());
-		}
-		// clean up the resources used to open the zip file
-		finally {
-			if (fis != null) {
-				fis.close();
-			}
-			if (zis != null) {
-				zis.close();
-			}
 		}
 
 	}
