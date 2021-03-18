@@ -1,0 +1,12 @@
+create table inventory(id int not null, name varchar(30), description varchar(100));
+insert into inventory values(1,'Widget','Basic car widget');
+insert into inventory values(2,'Widget 2','Advanced car widget');
+create table schedule(id int not null, task_name varchar(30), description varchar(100));
+insert into schedule values(1,'inventory','Count inventory');
+insert into schedule values(2,'sales','Count sales');
+create table docs(id int not null, title varchar(100), content varchar(100));
+insert into docs values(1,'Widget repair manual','Take out the widget. Fix it. Put it back in.');
+CREATE TABLE comments(id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (INCREMENT BY 1), comments VARCHAR(100));
+CREATE TABLE blog(id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (INCREMENT BY 1), blog VARCHAR(200));
+CREATE TABLE sessions(id VARCHAR(32), role VARCHAR(20), secret VARCHAR(32));
+INSERT INTO sessions VALUES('ED0850AD19EF0FF59651BAC7FC2662AZ','admin', 'UT45JEKX67KTI123ADWE900RKJE432WZ');
