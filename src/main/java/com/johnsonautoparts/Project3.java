@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -190,9 +191,6 @@ public class Project3 extends Project {
 			accessed = (Integer) accessedObj;
 		}
 
-		// increment the docs_accessed in the session attribute
-		session.setAttribute(SessionConstant.DOCS_ACCESSED, accessed + 1);
-
 		// get the content from the database
 		try {
 			String sql = "SELECT content FROM docs WHERE id = ?";
@@ -215,6 +213,9 @@ public class Project3 extends Project {
 
 					// return the count
 					if (rs.next()) {
+						// increment the docs_accessed in the session attribute
+						session.setAttribute(SessionConstant.DOCS_ACCESSED, accessed + 1);
+						
 						return rs.getString(1);
 					} else {
 						throw new AppException("restoreState did not return any results");
@@ -253,21 +254,16 @@ public class Project3 extends Project {
 	 * @param fileContents
 	 * @return boolean
 	 */
-	@SuppressWarnings({"finally", "resource"})
-	public boolean flowHandling(String fileContents) throws Exception {
-		File f = null;
-		BufferedWriter writer = null;
-
+	public boolean flowHandling(String fileContents) throws AppException {
 		// write the contents to a temporary file
 		try {
-			f = File.createTempFile("temp", null);
-			writer = new BufferedWriter(new FileWriter(f.getCanonicalPath()));
+			File f = File.createTempFile("temp", null);
+			try (BufferedWriter writer = new BufferedWriter(new FileWriter(f.getCanonicalPath()))) {
+				return true;
+			} 
 		} catch (IOException ioe) {
 			throw new AppException(
 					"flowHandling caught IO exception: " + ioe.getMessage());
-		} finally {
-			writer.close();
-			return true;
 		}
 	}
 
@@ -286,11 +282,11 @@ public class Project3 extends Project {
 	 * @param cmd
 	 * @return String
 	 */
-	public String runtimeException(String cmd) throws Exception {
+	public String runtimeException(String cmd) throws AppException {
 		try {
 			// execute the OS command
 			if (!Pattern.matches("[0-9A-Za-z]+", cmd)) {
-				throw new RuntimeException(
+				throw new AppException(
 						"exec was passed a cmd with illegal characters");
 			}
 
@@ -300,7 +296,7 @@ public class Project3 extends Project {
 			int result = proc.waitFor();
 
 			if (result != 0) {
-				throw new RuntimeException("process error: " + result);
+				throw new AppException("process error: " + result);
 			}
 			InputStream in = proc.getInputStream();
 
@@ -313,13 +309,10 @@ public class Project3 extends Project {
 			}
 
 			return strBuilder.toString();
-		} catch (RuntimeException re) {
-			throw new Exception(
-					"exec caught runtime error: " + re.getMessage());
-		} catch (IOException ioe) {
-			throw new Exception("exec caught IO error: " + ioe.getMessage());
+		}  catch (IOException ioe) {
+			throw new AppException("exec caught IO error: " + ioe.getMessage());
 		} catch (InterruptedException ie) {
-			throw new Exception(
+			throw new AppException(
 					"exec caught interrupted error: " + ie.getMessage());
 		}
 	}
@@ -339,14 +332,22 @@ public class Project3 extends Project {
 	 * @param str
 	 * @return boolean
 	 */
-	public boolean testNull(String str) throws NullPointerException {
+	public boolean testNull(@Nonnull String str) {
 		try {
+			if(str == null) {
+				throw new IllegalArgumentException("Argument is not allowed to be null");
+			}
 			// check if str is empty
 			return str.isEmpty();
 		} catch (NullPointerException npe) {
 			AppLogger.log("testNull caught NullPointer");
 			throw new NullPointerException("testNull received null object");
 		}
+	}
+	
+	private void psvm() {
+		// TODO Auto-generated method stub
+
 	}
 
 	/*
